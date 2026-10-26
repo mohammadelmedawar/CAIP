@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OLS vs Ridge vs Lasso playground</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF1F5; --panel:#FFFFFF; --ink:#17222E; --muted:#5B6878; --grid:#DFE5EC; --axis:#9AA6B4;
+  --ols:#6B7686; --ridge:#2F6FB0; --lasso:#C2410C; --pt:#17222E; --good:#2E7D4F;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10161E; --panel:#18212C; --ink:#E5EBF1; --muted:#97A4B3; --grid:#25303C; --axis:#4E5C6C;
+    --ols:#A3AEBC; --ridge:#6FA8E6; --lasso:#F08A4B; --pt:#E5EBF1; --good:#5FC48A;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10161E; --panel:#18212C; --ink:#E5EBF1; --muted:#97A4B3; --grid:#25303C; --axis:#4E5C6C;
+  --ols:#A3AEBC; --ridge:#6FA8E6; --lasso:#F08A4B; --pt:#E5EBF1; --good:#5FC48A;
+  color-scheme:dark;
+}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px);}
+*,*::before,*::after{box-sizing:inherit;}
+body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+  font-family:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.4;}
+
+.app{height:100%;max-width:1600px;margin:0 auto;padding:12px 16px;display:grid;gap:12px;
+  grid-template-columns:minmax(0,1fr) clamp(310px,31vw,410px);
+  grid-template-rows:auto auto auto minmax(120px,1fr);
+  grid-template-areas:"head head" "slide slide" "plot read" "plot path";}
+header{grid-area:head;display:flex;align-items:baseline;gap:6px 18px;flex-wrap:wrap;}
+header h1{font-size:clamp(1.2rem,1rem + 1.2vw,1.9rem);font-weight:800;letter-spacing:-0.02em;margin:0;}
+header p{margin:0;color:var(--muted);font-size:.92rem;}
+.panel{background:var(--panel);border-radius:12px;padding:12px 14px;min-height:0;min-width:0;}
+.slide{grid-area:slide;display:flex;align-items:center;gap:10px 18px;flex-wrap:wrap;}
+.plot{grid-area:plot;display:flex;flex-direction:column;}
+.read{grid-area:read;}
+.path{grid-area:path;display:flex;flex-direction:column;min-height:120px;}
+.canvas-box{position:relative;flex:1 1 auto;min-height:0;touch-action:none;}
+.canvas-box canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+
+.titlebar{display:flex;justify-content:space-between;align-items:baseline;gap:4px 12px;flex-wrap:wrap;margin-bottom:6px;}
+h2{font-size:.95rem;font-weight:700;margin:0;}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.82rem;color:var(--muted);}
+.legend label{display:flex;align-items:center;gap:5px;cursor:pointer;}
+.legend input{margin:0;}
+.sw{display:inline-block;width:16px;height:3px;border-radius:2px;}
+.note{font-size:.8rem;color:var(--muted);}
+
+.lam{display:flex;align-items:baseline;gap:8px;min-width:9.5em;}
+.lam .k{font-weight:700;}
+.lam output{font-size:1.6rem;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;}
+.slider-wrap{flex:1 1 300px;min-width:200px;}
+input[type=range]{width:100%;margin:0;accent-color:var(--lasso);height:28px;}
+.ticks{display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:-2px;}
+.btns{display:flex;gap:6px;flex-wrap:wrap;}
+button{font:inherit;font-size:.82rem;font-weight:600;color:var(--ink);background:transparent;border:1px solid var(--axis);border-radius:7px;padding:5px 10px;cursor:pointer;}
+button:hover{border-color:var(--ink);}
+button.primary{background:var(--ink);color:var(--panel);border-color:var(--ink);}
+button:focus-visible,input:focus-visible{outline:3px solid var(--ridge);outline-offset:2px;}
+
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;}
+th,td{padding:5px 6px;text-align:right;border-bottom:1px solid var(--grid);font-size:.88rem;}
+th:first-child,td:first-child{text-align:left;}
+th{color:var(--muted);font-weight:600;font-size:.78rem;}
+td.m{font-weight:700;}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+.formula{margin-top:10px;display:grid;gap:5px;font-size:.84rem;font-variant-numeric:tabular-nums;}
+.formula div{padding:6px 8px;border-radius:8px;background:color-mix(in srgb,var(--grid) 45%,transparent);}
+.formula b{font-weight:700;}
+.badge{margin-top:8px;padding:7px 9px;border-radius:8px;font-size:.84rem;font-weight:600;border:1px solid var(--grid);}
+.badge.cut{border-color:var(--lasso);color:var(--lasso);}
+.sums{font-size:.8rem;color:var(--muted);margin-top:6px;}
+
+@media (max-height:900px) and (min-width:821px){.sums{display:none;}}
+@media (max-height:760px) and (min-width:821px){
+  .app{padding:8px 12px;gap:8px;}
+  .formula{font-size:.78rem;gap:3px;}
+  .badge{padding:5px 8px;font-size:.8rem;}
+  header p{display:none;}
+  .panel{padding:8px 12px;}
+  .formula div{padding:4px 7px;}
+}
+@media (max-width:820px){
+  body{font-size:14px;}
+  .app{padding:8px 10px;gap:8px;grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto auto minmax(0,1.3fr) auto minmax(0,0.8fr);
+    grid-template-areas:"head" "slide" "plot" "read" "path";}
+  header p{display:none;}
+  .panel{padding:8px 10px;}
+  .read{overflow:visible;}
+  .formula{display:none;}
+  .sums{display:none;}
+  th,td{padding:3px 5px;font-size:.8rem;}
+  .lam output{font-size:1.3rem;}
+  .path{min-height:90px;}
+  .legend{font-size:.76rem;gap:10px;}
+}
+@media (max-width:820px) and (max-height:700px){
+  .path{display:none;}
+  .app{grid-template-rows:auto auto minmax(0,1fr) auto;grid-template-areas:"head" "slide" "plot" "read";}
+}
+@media (max-height:440px),(max-width:300px){body{overflow:auto;}.app{height:auto;min-height:100%;}.plot{height:70vh;}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>OLS vs Ridge vs Lasso</h1>
+    <p>Slide λ to see how each model reacts. Drag any point to change the data.</p>
+  </header>
+
+  <section class="panel slide">
+    <div class="lam"><span class="k">λ =</span><output id="lamOut">10</output></div>
+    <div class="slider-wrap">
+      <input type="range" id="lam" min="0" max="120" step="1" value="10" aria-label="Lambda">
+      <div class="ticks" id="ticks"></div>
+    </div>
+    <div class="btns">
+      <button id="cutBtn" title="Jump to the λ where Lasso removes the feature">✂️ Find Lasso cut-off</button>
+      <button class="primary" id="resetBtn">Reset</button>
+    </div>
+  </section>
+
+  <section class="panel plot">
+    <div class="titlebar">
+      <h2>Study hours vs exam score</h2>
+      <div class="legend">
+        <label><input type="checkbox" id="showO" checked><span class="sw" style="background:var(--ols)"></span>OLS</label>
+        <label><input type="checkbox" id="showR" checked><span class="sw" style="background:var(--ridge)"></span>Ridge</label>
+        <label><input type="checkbox" id="showL" checked><span class="sw" style="background:var(--lasso)"></span>Lasso</label>
+      </div>
+    </div>
+    <div class="canvas-box" id="plotBox"><canvas id="plot" aria-label="Scatter plot with OLS, Ridge and Lasso lines"></canvas></div>
+  </section>
+
+  <section class="panel read">
+    <table>
+      <thead><tr><th>Model</th><th>Slope</th><th>Intercept</th><th>SSE</th></tr></thead>
+      <tbody>
+        <tr><td><span class="dot" style="background:var(--ols)"></span>OLS</td><td class="m" id="aO"></td><td id="bO"></td><td id="eO"></td></tr>
+        <tr><td><span class="dot" style="background:var(--ridge)"></span>Ridge</td><td class="m" id="aR"></td><td id="bR"></td><td id="eR"></td></tr>
+        <tr><td><span class="dot" style="background:var(--lasso)"></span>Lasso</td><td class="m" id="aL"></td><td id="bL"></td><td id="eL"></td></tr>
+      </tbody>
+    </table>
+    <div class="formula">
+      <div id="fO"></div>
+      <div id="fR"></div>
+      <div id="fL"></div>
+    </div>
+    <div class="badge" id="badge"></div>
+    <div class="sums" id="sums"></div>
+  </section>
+
+  <section class="panel path">
+    <div class="titlebar">
+      <h2>Slope as λ grows</h2>
+      <span class="note">Ridge bends toward 0, Lasso hits 0</span>
+    </div>
+    <div class="canvas-box" id="pathBox"><canvas id="pathc" aria-label="Slope of each model as lambda increases"></canvas></div>
+  </section>
+</div>
+
+<script>
+(function(){
+  const START=[{x:1,y:52},{x:2,y:55},{x:3,y:61},{x:4,y:64},{x:5,y:68}];
+  const XMIN=0,XMAX=6,YMIN=40,YMAX=80;
+  const S={pts:START.map(p=>({...p})),lam:10,show:{O:true,R:true,L:true}};
+  const $=id=>document.getElementById(id);
+  const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const FONT='"Public Sans",system-ui,sans-serif';
+  const f1=v=>{const s=(Math.round(v*100)/100).toFixed(2);return (v<0&&+s!==0?'−':'')+Math.abs(+s).toFixed(2);};
+  const f0=v=>{const r=Math.round(v*10)/10;return (r<0?'−':'')+Math.abs(r).toFixed(1);};
+
+  function model(lam){
+    const n=S.pts.length;let mx=0,my=0;
+    for(const p of S.pts){mx+=p.x;my+=p.y;}mx/=n;my/=n;
+    let sxy=0,sxx=0;for(const p of S.pts){sxy+=(p.x-mx)*(p.y-my);sxx+=(p.x-mx)**2;}
+    const aO=sxx?sxy/sxx:0;
+    const aR=sxx+lam?sxy/(sxx+lam):0;
+    const aL=sxx?Math.sign(sxy)*Math.max(Math.abs(sxy)-lam/2,0)/sxx:0;
+    const mk=a=>{const b=my-a*mx;let sse=0;for(const p of S.pts){const e=p.y-(a*p.x+b);sse+=e*e;}return {a,b,sse};};
+    return {mx,my,sxy,sxx,O:mk(aO),R:mk(aR),L:mk(aL),cut:2*Math.abs(sxy)};
+  }
+
+  function niceStep(raw){const p=Math.pow(10,Math.floor(Math.log10(raw||1)));const f=raw/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p;}
+  function fit(canvas,box){
+    const dpr=window.devicePixelRatio||1,w=box.clientWidth,h=box.clientHeight;
+    const W=Math.max(1,Math.round(w*dpr)),H=Math.max(1,Math.round(h*dpr));
+    if(canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H;}
+    const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);return {ctx,w,h};
+  }
+
+  /* ---------- main plot ---------- */
+  const pc=$('plot'),pBox=$('plotBox');
+  const M={l:46,r:12,t:8,b:36};let G={w:0,h:0};
+  const X=x=>M.l+(x-XMIN)/(XMAX-XMIN)*(G.w-M.l-M.r);
+  const Y=y=>G.h-M.b-(y-YMIN)/(YMAX-YMIN)*(G.h-M.t-M.b);
+  const iX=px=>XMIN+(px-M.l)/(G.w-M.l-M.r)*(XMAX-XMIN);
+  const iY=py=>YMIN+(G.h-M.b-py)/(G.h-M.t-M.b)*(YMAX-YMIN);
+  let drag=null;
+
+  function drawPlot(m){
+    const {ctx,w,h}=fit(pc,pBox);G={w,h};if(w<40||h<40)return;
+    const small=w<420||h<240;M.l=small?38:46;M.b=small?30:36;
+    ctx.clearRect(0,0,w,h);ctx.font=(small?11:12)+'px '+FONT;ctx.lineWidth=1;
+    ctx.strokeStyle=css('--grid');ctx.fillStyle=css('--muted');
+    ctx.textAlign='center';ctx.textBaseline='top';
+    for(let x=0;x<=6;x++){ctx.beginPath();ctx.moveTo(X(x)+.5,Y(YMIN));ctx.lineTo(X(x)+.5,Y(YMAX));ctx.stroke();ctx.fillText(x,X(x),Y(YMIN)+5);}
+    ctx.textAlign='right';ctx.textBaseline='middle';
+    const ys=h<220?20:10;
+    for(let y=YMIN;y<=YMAX;y+=ys){ctx.beginPath();ctx.moveTo(X(XMIN),Y(y)+.5);ctx.lineTo(X(XMAX),Y(y)+.5);ctx.stroke();ctx.fillText(y,X(XMIN)-5,Y(y));}
+    ctx.font='600 '+(small?11:12)+'px '+FONT;ctx.textAlign='center';ctx.textBaseline='bottom';
+    ctx.fillText('Study hours (x)',(X(XMIN)+X(XMAX))/2,h-1);
+    ctx.save();ctx.translate(10,(Y(YMIN)+Y(YMAX))/2);ctx.rotate(-Math.PI/2);ctx.textBaseline='middle';ctx.fillText('Exam score (y)',0,0);ctx.restore();
+
+    ctx.save();ctx.beginPath();ctx.rect(X(XMIN),Y(YMAX),X(XMAX)-X(XMIN),Y(YMIN)-Y(YMAX));ctx.clip();
+    // mean crosshair
+    ctx.strokeStyle=css('--axis');ctx.globalAlpha=.5;ctx.setLineDash([3,4]);
+    ctx.beginPath();ctx.moveTo(X(m.mx),Y(YMIN));ctx.lineTo(X(m.mx),Y(YMAX));ctx.moveTo(X(XMIN),Y(m.my));ctx.lineTo(X(XMAX),Y(m.my));ctx.stroke();
+    ctx.setLineDash([]);ctx.globalAlpha=1;
+    const line=(r,col,dash,wd)=>{ctx.strokeStyle=col;ctx.lineWidth=wd;ctx.setLineDash(dash);ctx.beginPath();
+      ctx.moveTo(X(XMIN),Y(r.a*XMIN+r.b));ctx.lineTo(X(XMAX),Y(r.a*XMAX+r.b));ctx.stroke();ctx.setLineDash([]);};
+    if(S.show.O)line(m.O,css('--ols'),[7,6],2.5);
+    if(S.show.R)line(m.R,css('--ridge'),[],3);
+    if(S.show.L)line(m.L,css('--lasso'),[],3);
+    const rad=small?5:6.5;
+    for(const p of S.pts){
+      ctx.fillStyle=css('--pt');ctx.beginPath();ctx.arc(X(p.x),Y(p.y),rad,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle=css('--panel');ctx.lineWidth=2;ctx.stroke();
+    }
+    if(drag){ctx.strokeStyle=css('--ink');ctx.lineWidth=2;ctx.beginPath();ctx.arc(X(drag.x),Y(drag.y),rad+5,0,Math.PI*2);ctx.stroke();}
+    ctx.restore();
+    ctx.fillStyle=css('--muted');ctx.font='11px '+FONT;ctx.textAlign='left';ctx.textBaseline='top';
+    ctx.fillText('All lines pass through the average point',X(XMIN)+6,Y(YMAX)+4);
+  }
+
+  /* ---------- path chart ---------- */
+  const qc=$('pathc'),qBox=$('pathBox');
+  function drawPath(m){
+    const {ctx,w,h}=fit(qc,qBox);if(w<40||h<40)return;
+    const LMAX=+$('lam').max;
+    const mm={l:46,r:12,t:10,b:h<140?22:30};
+    const aO=m.O.a;let lo=Math.min(0,aO), hi=Math.max(0,aO);if(hi-lo<1e-9)hi=1;
+    const ystep=niceStep((hi-lo)/(h<140?2:4));
+    const ymin=Math.floor(lo/ystep)*ystep-(lo<0?0:ystep*0.15), ymax=Math.ceil(hi/ystep)*ystep+(hi>0?0:ystep*0.15);
+    const cx=l=>mm.l+l/LMAX*(w-mm.l-mm.r), cy=v=>h-mm.b-(v-ymin)/(ymax-ymin)*(h-mm.t-mm.b);
+    ctx.clearRect(0,0,w,h);ctx.font='11px '+FONT;ctx.lineWidth=1;
+    ctx.strokeStyle=css('--grid');ctx.fillStyle=css('--muted');
+    ctx.textAlign='center';ctx.textBaseline='top';
+    const step=niceStep(LMAX/6);
+    for(let l=0;l<=LMAX;l+=step){ctx.beginPath();ctx.moveTo(cx(l)+.5,cy(ymin));ctx.lineTo(cx(l)+.5,cy(ymax));ctx.stroke();ctx.fillText(l,cx(l),cy(ymin)+4);}
+    ctx.textAlign='right';ctx.textBaseline='middle';
+    for(let v=Math.ceil(ymin/ystep)*ystep;v<=ymax+1e-9;v+=ystep){ctx.beginPath();ctx.moveTo(cx(0),cy(v)+.5);ctx.lineTo(cx(LMAX),cy(v)+.5);ctx.stroke();ctx.fillText(String(+v.toFixed(2)).replace('-','−'),cx(0)-5,cy(v));}
+    // zero line
+    ctx.strokeStyle=css('--axis');ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(cx(0),cy(0));ctx.lineTo(cx(LMAX),cy(0));ctx.stroke();
+    if(h>=140){ctx.font='600 11px '+FONT;ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('λ',(cx(0)+cx(LMAX))/2,h-1);}
+    // OLS flat
+    if(S.show.O){ctx.strokeStyle=css('--ols');ctx.setLineDash([7,6]);ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx(0),cy(aO));ctx.lineTo(cx(LMAX),cy(aO));ctx.stroke();ctx.setLineDash([]);}
+    const curve=(fn,col)=>{ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.beginPath();for(let i=0;i<=240;i++){const l=LMAX*i/240,v=fn(l);i?ctx.lineTo(cx(l),cy(v)):ctx.moveTo(cx(l),cy(v));}ctx.stroke();};
+    if(S.show.R)curve(l=>m.sxx+l?m.sxy/(m.sxx+l):0,css('--ridge'));
+    if(S.show.L)curve(l=>m.sxx?Math.sign(m.sxy)*Math.max(Math.abs(m.sxy)-l/2,0)/m.sxx:0,css('--lasso'));
+    // cut marker
+    if(S.show.L&&m.cut<=LMAX){ctx.fillStyle=css('--lasso');ctx.beginPath();ctx.arc(cx(m.cut),cy(0),4,0,Math.PI*2);ctx.fill();}
+    // current lambda
+    const L=S.lam;ctx.strokeStyle=css('--ink');ctx.lineWidth=1.5;ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.moveTo(cx(L),cy(ymin));ctx.lineTo(cx(L),cy(ymax));ctx.stroke();ctx.setLineDash([]);
+    const dot=(v,col)=>{ctx.fillStyle=col;ctx.beginPath();ctx.arc(cx(L),cy(v),5.5,0,Math.PI*2);ctx.fill();ctx.strokeStyle=css('--panel');ctx.lineWidth=2;ctx.stroke();};
+    if(S.show.R)dot(m.R.a,css('--ridge'));
+    if(S.show.L)dot(m.L.a,css('--lasso'));
+  }
+
+  /* ---------- readouts ---------- */
+  function updateSlider(m){
+    const sl=$('lam');
+    const need=Math.max(120,Math.ceil(m.cut*1.3/10)*10);
+    if(+sl.max!==need){sl.max=need;}
+    const t=$('ticks');const mx=+sl.max;const st=niceStep(mx/6);let s='';
+    for(let v=0;v<=mx+1e-9;v+=st)s+='<span>'+v+'</span>';
+    t.innerHTML=s;
+  }
+  function update(){
+    const m=model(S.lam);updateSlider(m);
+    if(S.lam>+$('lam').max)S.lam=+$('lam').max;
+    $('lamOut').textContent=S.lam;$('lam').value=S.lam;
+    for(const k of ['O','R','L']){$('a'+k).textContent=f1(m[k].a);$('b'+k).textContent=f0(m[k].b);$('e'+k).textContent=f0(m[k].sse);}
+    const sxy=f0(m.sxy),sxx=f0(m.sxx),L=S.lam;
+    $('fO').innerHTML='<b>OLS</b> = Sxy ÷ Sxx = '+sxy+' ÷ '+sxx+' = <b>'+f1(m.O.a)+'</b>';
+    $('fR').innerHTML='<b>Ridge</b> = Sxy ÷ (Sxx + λ) = '+sxy+' ÷ ('+sxx+' + '+L+') = <b>'+f1(m.R.a)+'</b>';
+    $('fL').innerHTML='<b>Lasso</b> = (|Sxy| − λ/2) ÷ Sxx = ('+f0(Math.abs(m.sxy))+' − '+(L/2)+') ÷ '+sxx+' = <b>'+f1(m.L.a)+'</b>'+(Math.abs(m.sxy)-L/2<=0?' (top below 0 → 0)':'');
+    const b=$('badge');
+    if(m.L.a===0&&m.sxy!==0){b.className='badge cut';b.textContent='✂️ Lasso removed the feature: its slope is exactly 0, so it just predicts the average score.';}
+    else{b.className='badge';b.textContent='Lasso cuts the feature at λ = '+f0(m.cut)+'. Ridge never reaches 0.';}
+    $('sums').textContent='Average x = '+f1(m.mx)+', average y = '+f1(m.my)+', Sxy = '+sxy+', Sxx = '+sxx+'. Higher SSE means the line fits the training points less tightly.';
+    drawPlot(m);drawPath(m);
+  }
+
+  /* ---------- interaction ---------- */
+  function pos(e){const r=pc.getBoundingClientRect();return {px:e.clientX-r.left,py:e.clientY-r.top};}
+  pc.addEventListener('pointerdown',e=>{
+    const {px,py}=pos(e);let best=null,bd=22*22;
+    for(const p of S.pts){const dx=X(p.x)-px,dy=Y(p.y)-py,d=dx*dx+dy*dy;if(d<bd){bd=d;best=p;}}
+    if(!best)return;drag=best;pc.setPointerCapture(e.pointerId);update();
+  });
+  pc.addEventListener('pointermove',e=>{
+    if(!drag)return;const {px,py}=pos(e);
+    drag.x=Math.round(Math.max(0.2,Math.min(5.8,iX(px)))*10)/10;
+    drag.y=Math.round(Math.max(YMIN+1,Math.min(YMAX-1,iY(py)))*10)/10;update();
+  });
+  const end=()=>{if(drag){drag=null;update();}};
+  pc.addEventListener('pointerup',end);pc.addEventListener('pointercancel',end);
+
+  $('lam').addEventListener('input',e=>{S.lam=+e.target.value;update();});
+  $('cutBtn').addEventListener('click',()=>{const m=model(0);S.lam=Math.min(+$('lam').max,Math.ceil(m.cut));update();});
+  $('resetBtn').addEventListener('click',()=>{S.pts=START.map(p=>({...p}));S.lam=10;update();});
+  for(const k of ['O','R','L'])$('show'+k).addEventListener('change',e=>{S.show[k]=e.target.checked;update();});
+
+  let raf=0;const sched=()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(update);};
+  const ro=new ResizeObserver(sched);ro.observe(pBox);ro.observe(qBox);
+  window.addEventListener('resize',sched);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',update);
+  new MutationObserver(update).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(update);
+  update();
+})();
+</script>
+</body>
+</html>
